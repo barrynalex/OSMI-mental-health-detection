@@ -1,0 +1,1762 @@
+---
+title: "Data Mining Project"
+author: "Yi-Wei Sun";"Mina(Hsin-Yuan) Yen";"Drishti Parekh";"Tanmaya Kompella";"Nigam Shah"
+date: "5/5/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+
+```{r}
+library(tree)
+library(tidyverse)
+library(class)
+library(caret)
+library(e1071)
+library(dplyr)
+```
+
+
+```{r}
+OSMI_17 <- read.csv("OSMI 2017.csv", na.strings = c("", "NA"))
+OSMI_18 <- read.csv("OSMI 2018.csv", na.strings = c("", "NA"))
+OSMI_19 <- read.csv("OSMI 2019.csv", na.strings = c("", "NA"))
+OSMI_20 <- read.csv("OSMI 2020.csv", na.strings = c("", "NA"))
+OSMI_21 <- read.csv("OSMI 2021.csv", na.strings = c("", "NA"))
+cols <- c("What.is.your.age.", "What.is.your.gender.", "What.country.do.you.live.in.",
+          "Do.you.currently.have.a.mental.health.disorder.", "Are.you.self.employed.",
+          "How.many.employees.does.your.company.or.organization.have.", "Is.your.primary.role.within.your.company.related.to.tech.IT."
+          ,"Does.your.employer.provide.mental.health.benefits.as.part.of.healthcare.coverage.", 
+          "If.a.mental.health.issue.prompted.you.to.request.a.medical.leave.from.work..how.easy.or.difficult.would.it.be.to.ask.for.that.leave.",
+          "Overall..how.much.importance.does.your.employer.place.on.physical.health.",
+          "Overall..how.much.importance.does.your.employer.place.on.mental.health.",
+          "Have.you.had.a.mental.health.disorder.in.the.past.", "Do.you.have.a.family.history.of.mental.illness.",
+          "Have.your.observations.of.how.another.individual.who.discussed.a.mental.health.issue.made.you.less.likely.to.reveal.a.mental.health.issue.yourself.in.your.current.workplace.",
+          "Have.you.observed.or.experienced.an.unsupportive.or.badly.handled.response.to.a.mental.health.issue.in.your.current.or.previous.workplace.",
+          "Have.you.observed.or.experienced.supportive.or.well.handled.response.to.a.mental.health.issue.in.your.current.or.previous.workplace.",
+          "Overall..how.well.do.you.think.the.tech.industry.supports.employees.with.mental.health.issues.",
+          "Have.you.ever.sought.treatment.for.a.mental.health.disorder.from.a.mental.health.professional.",
+          "Do.you.know.the.options.for.mental.health.care.available.under.your.employer.provided.health.coverage.",
+          "Has.your.employer.ever.formally.discussed.mental.health..for.example..as.part.of.a.wellness.campaign.or.other.official.communication..",
+          "Does.your.employer.offer.resources.to.learn.more.about.mental.health.disorders.and.options.for.seeking.help.")
+```
+
+
+```{r}
+df17 <- OSMI_17[cols]
+df18 <- OSMI_18[cols]
+df19 <- OSMI_19[cols]
+df20 <- OSMI_20[cols]
+df21 <- OSMI_21[cols]
+df <- rbind(df17, df18, df19, df20, df21)
+df <- rename(df, age = What.is.your.age., gender = What.is.your.gender., country = What.country.do.you.live.in., MH_disorder = Do.you.currently.have.a.mental.health.disorder., self_employed = Are.you.self.employed., company_size = How.many.employees.does.your.company.or.organization.have., IT_related = Is.your.primary.role.within.your.company.related.to.tech.IT., HC_coverage = Does.your.employer.provide.mental.health.benefits.as.part.of.healthcare.coverage., medical_leave = If.a.mental.health.issue.prompted.you.to.request.a.medical.leave.from.work..how.easy.or.difficult.would.it.be.to.ask.for.that.leave., PH_importance = Overall..how.much.importance.does.your.employer.place.on.physical.health., MH_importance = Overall..how.much.importance.does.your.employer.place.on.mental.health., past_disorder = Have.you.had.a.mental.health.disorder.in.the.past., family_history = Do.you.have.a.family.history.of.mental.illness., observation = Have.your.observations.of.how.another.individual.who.discussed.a.mental.health.issue.made.you.less.likely.to.reveal.a.mental.health.issue.yourself.in.your.current.workplace., unsupported_space = Have.you.observed.or.experienced.an.unsupportive.or.badly.handled.response.to.a.mental.health.issue.in.your.current.or.previous.workplace., supported_space = Have.you.observed.or.experienced.supportive.or.well.handled.response.to.a.mental.health.issue.in.your.current.or.previous.workplace., tech_support = Overall..how.well.do.you.think.the.tech.industry.supports.employees.with.mental.health.issues., treatment = Have.you.ever.sought.treatment.for.a.mental.health.disorder.from.a.mental.health.professional.,
+             coverage_option = Do.you.know.the.options.for.mental.health.care.available.under.your.employer.provided.health.coverage.,
+             formal_discussion = Has.your.employer.ever.formally.discussed.mental.health..for.example..as.part.of.a.wellness.campaign.or.other.official.communication..,
+             resources = Does.your.employer.offer.resources.to.learn.more.about.mental.health.disorders.and.options.for.seeking.help.)
+```
+
+
+```{r}
+#Delete rows without any value
+na_row <- rowSums(is.na(df))==ncol(df)
+df[na_row,]
+df <- subset(df, rowSums(is.na(df))!=ncol(df))
+#Change the type error in self_employed column
+row_9 <- df$self_employed == 9
+df[row_9,]
+df[row_9, "self_employed"] <- 0
+df$self_employed <- as.factor(df$self_employed)
+summary(df$self_employed)
+```
+
+
+```{r}
+#Turn gender into lower case
+df$gender <- tolower(df$gender)
+#group all the different answer for gender
+male <- c("male", "m", "male-ish", "maile", "mal", "male (cis)", "make", "male ", "man","msle", "mail", "malr","cis man", "cis male", "cis-male", "cis hetero male", "cis male ", "cisgender male", "cishet male", "dude", "homem cis", "i have a penis", "identify as male", "m", "mail", "make", "male", "male (cis)", "male ", "male-ish", "male (hey this is the tech industry you're talking about)", "male, born with xy chromosoms", "male, cis", "male/he/him", "malel", "man", "masculine", "masculino", "mostly male", "swm")
+female <- c("cis-female", "cis female", "cis-het male", "cis female ", "cis woman", "cisgender female", "cisgendered woman", "f", "f, cisgender", "femail", "female-identified", "female-ish", "female ", "female (cis)", "female (cis) ", "female (cisgender)", "female, she/her", "female/gender non-binary", "femalw", "femile", "femmina", "i identify as female", "my sex is female.", "she/her/they/them", "woman", "woman-identified", "*shrug emoji* (f)")
+non_binary <- c("agender", "agender trans woman", "agender/genderfluid", "demiguy", "gender non-conforming woman", "genderfluid", "genderqueer", "genderqueer demigirl", "genderqueer/non-binary", "male (or female, or both)", "male/androgynous ", "nb", "non-binary", "non-binary and gender fluid", "non-binary/agender", "non binary", "nonbinary", "nonbinary/femme", "ostensibly male", "other", "questioning", "trans female", "trans man", "trans non-binary/genderfluid", "trans woman", "transfeminine", "transgender", "uhhhhhhhhh fem genderqueer?", "female/gender non-binary.", "afab non-binary")
+df[df$gender %in% male, "gender"] <- "male"
+df[df$gender %in% female, "gender"] <- "female"
+df[df$gender %in% non_binary, "gender"] <- "non_binary"
+sex <- c("male", "female", "non_binary")
+df <- subset(df, df$gender %in% sex)
+df$gender <- as.factor(df$gender)
+summary(df$gender)
+```
+
+
+```{r}
+df <- subset(df, df$MH_disorder!="Don't Know")
+row_possi <- df$MH_disorder == "Possibly"
+df[row_possi, "MH_disorder"] <- "Yes"
+df$MH_disorder <- as.factor(df$MH_disorder)
+summary(df$MH_disorder)
+```
+
+
+```{r}
+#company_size
+df[df$self_employed=="1", "company_size"] <- '1¤ë5¤é'
+df[df$company_size == "1¤ë5¤é", "company_size"] <- "1-5"
+df[df$company_size == "6¤ë25¤é", "company_size"] <- "6-25"
+df$company_size <- as.factor(df$company_size)
+summary(df$company_size)
+
+#IT_related
+df[df$self_employed=="1", "IT_related"] <- "1"
+df$IT_related<- as.factor(df$IT_related)
+summary(df$IT_related)
+
+#HC_coverage
+df[df$self_employed=="1", "HC_coverage"] <- "Self"
+df$HC_coverage <- as.factor(df$HC_coverage)
+summary(df$HC_coverage)
+
+#medical_leave
+#change self_employed data into very easy
+df[df$self_employed=="1", "medical_leave"] <- "Very easy"
+df$medical_leave <- as.factor(df$medical_leave)
+summary(df$medical_leave)
+
+#PH_importance
+#fill self_employed data with mean
+PH_mean <- mean(df$PH_importance, na.rm = TRUE)
+df[df$self_employed=="1", "PH_importance"] <- PH_mean
+summary(df$PH_importance)
+
+#MH_importance
+#fill self_employed data with mean
+MH_mean <- mean(df$MH_importance, na.rm = TRUE)
+df[df$self_employed=="1", "MH_importance"] <- MH_mean
+summary(df$MH_importance)
+
+#past_disorder
+df[is.na(df$past_disorder),'past_disorder'] <- "Don't Know"
+df$past_disorder <- as.factor(df$past_disorder)
+summary(df$past_disorder)
+
+#family_history
+df$family_history <- as.factor(df$family_history)
+summary(df$family_history)
+
+#observation
+df$observation <- as.factor(df$observation)
+summary(df$observation)
+
+#unsupported_space
+df$unsupported_space[df$unsupported_space=="Yes, I experienced"] <- "Yes"
+df$unsupported_space[df$unsupported_space=="Yes, I observed"] <- "Yes"
+df$unsupported_space[df$unsupported_space=="Maybe/Not sure"] <- "Maybe"
+df$unsupported_space[df$unsupported_space=="I\'ve always been self-employed"] <- "NA(Self-employed)"
+df$unsupported_space <- as.factor(df$unsupported_space)
+summary(df$unsupported_space)
+
+#supported_space
+df$supported_space[df$supported_space=="Yes, I experienced"] <- "Yes"
+df$supported_space[df$supported_space=="Yes, I observed"] <- "Yes"
+df$supported_space[df$supported_space=="Maybe/Not sure"] <- "Maybe"
+df$supported_space[df$supported_space=="I\'ve always been self-employed"] <- "NA(Self-employed)"
+df$supported_space <- as.factor(df$supported_space)
+summary(df$supported_space)
+
+#df$coverage_option
+df[df$self_employed=="1", "coverage_option"] <- 'N/A'
+df$coverage_option <- as.factor(df$coverage_option)
+summary(df$coverage_option)
+
+
+unique(df$formal_discussion)
+df$formal_discussion[is.na(df$formal_discussion)] <- "NA(Self-employed)"
+df$formal_discussion <- as.factor(df$formal_discussion)
+summary(df$formal_discussion)
+
+#tech_support
+df$tech_support <- as.factor(df$tech_support)
+
+#treatment
+unique(df$treatment)
+df$treatment[df$treatment=="FALSE"] <- "0"
+df$treatment[df$treatment=="TRUE"] <- "1"
+df$treatment <- as.factor(df$treatment)
+summary(df$treatment)
+
+unique(df$resources)
+df[is.na(df$resources), 'resources'] <- "NA(Self-employed)"
+df$resources <- as.factor(df$resources)
+summary(df$resources)
+```
+```{r}
+#Heat Map:
+#Convert the factor cols to numeric
+dfheat <- df %>% mutate(across(.cols=where(is.factor), .fns=as.numeric))
+
+#Select only numeric columns
+temp <- select_if(dfheat, is.numeric)
+
+#Create dataframe of variables and correlation values
+data_hm <- temp %>% 
+  cor() %>% 
+  as.data.frame() %>% 
+  rownames_to_column(var = "Var1") %>% 
+  pivot_longer(age:resources, 
+               names_to="Variable", values_to="Correlation")
+
+#Just to check the highly correlated variables
+ordered <- data_hm[order(-data_hm$Correlation),][21:40,]
+
+
+#Plot the map
+heatmap <- data_hm %>%
+  ggplot(aes(x=Var1, y=Variable, fill=Correlation)) + 
+  geom_tile()
+
+heatmap1 <- heatmap +
+  scale_fill_gradient2(name="Correlation",midpoint = 0,low="red4", mid="white", high = "blue4")
+
+# Improve the chart
+heatmap1 + 
+  labs(title = "Past Disorder and Treatment variables are highly correlated") +
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.title = element_blank(),
+        axis.text = element_text(face="bold",size=11),
+        plot.title = element_text(face="bold",size=14),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+```
+
+```{r}
+#Bar Chart 1 - Disorder vs HC Coverage
+disorder_count1 <-  df %>%
+  group_by(MH_disorder, HC_coverage) %>%
+  summarize(count = n())
+
+clusterbar1 <- disorder_count1 %>%
+  ggplot(aes(x=MH_disorder, y=count)) +
+  geom_col(aes(fill = HC_coverage),width=0.7,position="dodge") # it will create a stacked bar chart if we remove position = "dodge".
+
+
+clusterbar1 +
+  labs(y = "Count of Mental Health Disorder",
+       x = "",
+       title = "Most Employees who had mental health disorder had their employers
+       provide mental health benefits as part of healthcare coverage") +
+  theme_minimal() +
+  theme(axis.title.x = element_text(face="bold"), # x-axis title is too close to axis ticks labels.
+        axis.text = element_text(face="bold",size=10),
+        legend.margin = margin(t=-15), #To move the legend closer to the x axis, thus negative number
+        plot.caption = element_text(face="italic"),
+        plot.title = element_text(size=14),
+        panel.grid.minor = element_blank(), # remove minor grid lines
+        panel.grid.major.y = element_line(color="grey70"),
+        panel.grid.major.x = element_blank()) +
+  scale_fill_brewer(name="Health Care Coverage",palette ="RdYlBu")
+
+```
+
+```{r}
+#Bar Chart 2: Disorder vs Gender
+disorder_count2 <-  df %>%
+group_by(MH_disorder, gender) %>%
+  summarize(count = n())
+
+clusterbar2 <- disorder_count2 %>%
+  ggplot(aes(x=MH_disorder, y=count)) +
+  geom_col(aes(fill = gender),width=0.7,position="dodge") # it will create a stacked bar chart if we remove position = "dodge".
+
+clusterbar2 +
+  labs(y = "Count of Mental Health Disorder",
+       x = "",
+       title = "Male gender have more mental health issues than other genders") +
+  theme_minimal() +
+  theme(axis.title.x = element_text(face="bold"), # x-axis title is too close to axis ticks labels.
+        axis.text = element_text(face="bold",size=10),
+        legend.position="bottom",
+        legend.margin = margin(t=-15), #To move the legend closer to the x axis, thus negative number
+        plot.caption = element_text(face="italic"),
+        plot.title = element_text(size=14),
+        panel.grid.minor = element_blank(), # remove minor grid lines
+        panel.grid.major.y = element_line(color="grey70"),
+        panel.grid.major.x = element_blank()) +
+  scale_fill_brewer(name="Gender",palette ="RdYlBu")
+
+```
+
+```{r}
+#Bar Chart 3: Disorder vs Country
+disorder_count3 <-  df %>%
+  group_by(MH_disorder, country) %>%
+  summarize(count = n()) %>%
+  top_n(5, count)
+
+clusterbar3 <- disorder_count3 %>%
+  ggplot(aes(x=MH_disorder, y=count)) +
+  geom_col(aes(fill = country),width=0.7,position="dodge") # it will create a stacked bar chart if we remove position = "dodge".
+
+clusterbar3 +
+  labs(y = "Count of Mental Health Disorder",
+       x = "",
+       title = "USA has the highest number of employees with mental health issues") +
+  theme_minimal() +
+  theme(axis.title.x = element_text(face="bold"), # x-axis title is too close to axis ticks labels.
+        axis.text = element_text(face="bold",size=10),
+        legend.position="bottom",
+        legend.margin = margin(t=-15), #To move the legend closer to the x axis, thus negative number
+        plot.caption = element_text(face="italic"),
+        plot.title = element_text(size=14),
+        panel.grid.minor = element_blank(), # remove minor grid lines
+        panel.grid.major.y = element_line(color="grey70"),
+        panel.grid.major.x = element_blank()) +
+  scale_fill_brewer(name="Country",palette ="RdYlBu")
+
+```
+
+```{r}
+#Bar Chart 4: Disorder vs Self Employed
+disorder_count4 <-  df %>%
+  group_by(MH_disorder, self_employed) %>%
+  summarize(count = n())
+
+clusterbar4 <- disorder_count4 %>%
+  ggplot(aes(x=MH_disorder, y=count)) +
+  geom_col(aes(fill = self_employed),width=0.7,position="dodge") # it will create a stacked bar chart if we remove position = "dodge".
+
+clusterbar4 +
+  labs(y = "Count of Mental Health Disorder",
+       x = "",
+       title = "People who are self-employed are generally
+       lesser prone to mental health issues") +
+  theme_minimal() +
+  theme(axis.title.x = element_text(face="bold"), # x-axis title is too close to axis ticks labels.
+        axis.text = element_text(face="bold",size=10),
+        legend.margin = margin(t=-15), #To move the legend closer to the x axis, thus negative number
+        plot.caption = element_text(face="italic"),
+        plot.title = element_text(size=14),
+        panel.grid.minor = element_blank(), # remove minor grid lines
+        panel.grid.major.y = element_line(color="grey70"),
+        panel.grid.major.x = element_blank()) +
+  scale_fill_brewer(name="Self Employed",palette ="RdYlBu", labels=c("0-No", "1-Yes"))
+
+```
+
+```{r}
+#Bar Chart 5: Disorder vs Past Disorder
+disorder_count5 <-  df %>%
+  group_by(MH_disorder, past_disorder) %>%
+  summarize(count = n())
+
+clusterbar5 <- disorder_count5 %>%
+  ggplot(aes(x=MH_disorder, y=count)) +
+  geom_col(aes(fill = past_disorder),width=0.7,position="dodge") # it will create a stacked bar chart if we remove position = "dodge".
+
+clusterbar5 +
+  labs(y = "Count of Mental Health Disorder",
+       x = "",
+       title = "People who have had a mental health disorder in the past
+       are more likely to have mental health disorder in present") +
+  theme_minimal() +
+  theme(axis.title.x = element_text(face="bold"), # x-axis title is too close to axis ticks labels.
+        axis.text = element_text(face="bold",size=10),
+        legend.margin = margin(t=-15), #To move the legend closer to the x axis, thus negative number
+        plot.caption = element_text(face="italic"),
+        plot.title = element_text(size=14),
+        panel.grid.minor = element_blank(), # remove minor grid lines
+        panel.grid.major.y = element_line(color="grey70"),
+        panel.grid.major.x = element_blank()) +
+  scale_fill_brewer(name="Mental illness in past",palette ="RdYlBu")
+
+
+```
+
+```{r}
+#Bar Chart 6: Disorder vs Family history
+disorder_count6 <-  df %>%
+  group_by(MH_disorder, family_history) %>%
+  summarize(count = n())
+
+clusterbar6 <- disorder_count6 %>%
+  ggplot(aes(x=MH_disorder, y=count)) +
+  geom_col(aes(fill = family_history),width=0.7,position="dodge") # it will create a stacked bar chart if we remove position = "dodge".
+
+clusterbar6 +
+  labs(y = "Count of Mental Health Disorder",
+       x = "",
+       title = "People who have had a family history of mental illness
+       are more likely to have mental health disorder in present") +
+  theme_minimal() +
+  theme(axis.title.x = element_text(face="bold"), # x-axis title is too close to axis ticks labels.
+        axis.text = element_text(face="bold",size=10),
+        legend.margin = margin(t=-15), #To move the legend closer to the x axis, thus negative number
+        plot.caption = element_text(face="italic"),
+        plot.title = element_text(size=14),
+        panel.grid.minor = element_blank(), # remove minor grid lines
+        panel.grid.major.y = element_line(color="grey70"),
+        panel.grid.major.x = element_blank()) +
+  scale_fill_brewer(name="Family history of mental illness",palette ="RdYlBu")
+
+```
+
+```{r}
+#Scatter Plot
+df %>%
+  ggplot(aes(x=MH_importance, y = PH_importance)) +
+  geom_point(color='grey60') + 
+  geom_smooth(method = "lm", se = FALSE, col='darkred',lty = 2) + # se = FALSE will remove intervals around the line.
+  labs(title="",
+       x="", y="") +
+  theme_classic() +
+  theme(axis.title.x = element_text(face="bold",margin = margin(t = 10)), # x-axis title is too close to axis ticks labels.
+        axis.text = element_text(face="bold",size=10),
+        plot.caption = element_text(face="italic"),
+        plot.title = element_text(size=12),
+        panel.grid.minor = element_blank(), # remove minor grid lines
+        panel.grid.major.y = element_line(color="grey95"),
+        panel.grid.major.x = element_blank())
+```
+
+<!------------------------Logistic Regression---------------------------------->
+
+```{r}
+dflogreg <- df
+dflogreg$country <- NULL
+set.seed(12345)
+intrain <- sample(nrow(dflogreg), 0.7*nrow(dflogreg))
+dftrain <- data.frame(dflogreg[intrain,])
+dftest<- data.frame(dflogreg[-intrain,])
+
+#Creating the model
+model_logistic<-glm(MH_disorder~.,data=dftrain,family="binomial")
+summary(model_logistic)
+```
+
+```{r}
+#Calculating Error for Training data
+predictprob_train1 <- predict(model_logistic,type = "response")
+actualclass_train1 <- as.numeric(dftrain$MH_disorder)-1
+predictedclass_train1 <- ifelse(predictprob_train1>0.5,1,0)
+
+(conf_train1 <- table(actualclass_train1,predictedclass_train1))
+(ERR_Train1 <- (conf_train1[1,2]+conf_train1[2,1])/sum(conf_train1))
+(ACC_Train1 <- 1 - ERR_Train1)
+```
+
+```{r}
+#Calculating Error for Test Data
+predictprob_test1 <- predict(model_logistic,type = "response",newdata=dftest)
+actualclass_test1 <- as.numeric(dftest$MH_disorder)-1
+predictedclass_test1 <- ifelse(predictprob_test1>0.5,1,0)
+
+(conf_test1 <- table(actualclass_test1,predictedclass_test1))
+(ACC_log_Test1 <- (conf_test1[1,1]+conf_test1[2,2])/sum(conf_test1))
+(sensitivity.log.1 <- conf_test1[2,2]/sum(conf_test1[2,]))
+(spedificity.log.1 <- conf_test1[1,1]/sum(conf_test1[1,]))
+```
+
+```{r}
+#Plot the ROC curves for both the training and test data sets on the same graph (distinguishing with different colors)
+library(pROC)
+
+par(pty="s")
+roc_rose1 <- plot(roc(actualclass_train1, predictprob_train1), print.auc = TRUE, legacy.axes=TRUE,col = "blue")
+## Next, the additional argument "add = TRUE" adds the test ROC to the previous plot
+roc_rose1 <- plot(roc(actualclass_test1, predictprob_test1), print.auc = TRUE, 
+                  col = "green", print.auc.y = .4, add = TRUE)
+```
+
+
+<!-------------Logistic Regression with Backward Elimination------------------->
+
+
+```{r}
+step.lm<-step(model_logistic,direction = "backward",trace=0)
+summary(step.lm)
+```
+
+```{r}
+#Calculating Error for Training data
+predictprob_train <- predict(step.lm,type = "response")
+actualclass_train <- as.numeric(dftrain$MH_disorder)-1
+predictedclass_train <- ifelse(predictprob_train>0.5,1,0)
+
+(conf_train <- table(actualclass_train,predictedclass_train))
+(ERR_Train <- (conf_train[1,2]+conf_train[2,1])/sum(conf_train))
+(ACC_Train <- 1 - ERR_Train)
+
+```
+
+```{r}
+#Calculating Error for Test Data
+predictprob_test <- predict(step.lm,type = "response",newdata=dftest)
+actualclass_test <- as.numeric(dftest$MH_disorder)-1
+predictedclass_test <- ifelse(predictprob_test>0.5,1,0)
+
+(conf_test2 <- table(actualclass_test,predictedclass_test))
+(ACC_log_Test2 <- (conf_test2[1,1]+conf_test2[2,2])/sum(conf_test2))
+(sensitivity.log.2 <- conf_test2[2,2]/sum(conf_test2[2,]))
+(spedificity.log.2 <- conf_test2[1,1]/sum(conf_test2[1,]))
+```
+
+```{r}
+#Finding best cutoff
+#Running a Loop to find the best cut-off based on training data
+S <- seq(0,1,length = 100)
+ERR <- numeric(100)
+#
+for (i in 1:100){
+  cutoff = S[i]
+  predictedclass_train <- ifelse(predictprob_train>cutoff,1,0)
+  ERR[i] = 1-(sum(actualclass_train == predictedclass_train)/nrow(dftrain))
+}
+plot(S,ERR, type="l")
+#
+```
+
+```{r}
+(bestcutoff <- S[which.min(ERR)])
+#
+ERR[which.min(ERR)] # training error at best cut-off
+```
+
+```{r}
+#Finding predictions again for the best cut-off
+predictedclass_test <- ifelse(predictprob_test>bestcutoff,1,0)
+(conf_test <- table(actualclass_test,predictedclass_test))
+(ERR_Test <- (conf_test[1,2]+conf_test[2,1])/sum(conf_test))
+(ACC_Test <- 1 - ERR_Test)
+```
+
+```{r}
+#Plot the ROC curves for both the training and test data sets on the same graph (distinguishing with different colors)
+library(pROC)
+
+par(pty="s")
+roc_rose <- plot(roc(actualclass_train, predictprob_train), print.auc = TRUE, legacy.axes=TRUE,col = "blue")
+## Next, the additional argument "add = TRUE" adds the test ROC to the previous plot
+roc_rose <- plot(roc(actualclass_test, predictprob_test), print.auc = TRUE, legacy.axes=TRUE,
+                 col = "green", print.auc.y = .4, add = TRUE)
+```
+
+```{r}
+#Plot the Training data Lift Chart
+df2 <- data.frame(predictprob_train,actualclass_train)
+df2S <- df2[order(-predictprob_train),] ## Sorted by probability (descending)
+##
+#Create a new variable in the sorted data frame which is the cumulative of Actual
+# Plot this cumulative variable (the X-axis can be interpreted as the cumulative)
+# number of cases
+df2S$Lift <- cumsum(df2S$actualclass_train)
+plot(df2S$Lift,type="n",main="Lift Chart for Train data",xlab="Number of Cases",ylab="Cumulative Success")
+lines(df2S$Lift)
+abline(0,sum(df2S$actualclass_train)/nrow(df2S),lty = 2, col="red")
+```
+
+```{r}
+#Plot the test data Lift Chart
+df3<- data.frame(predictprob_test,actualclass_test)
+df3S <- df3[order(-predictprob_test),] ## Sorted by probability (descending)
+##
+#Create a new variable in the sorted data frame which is the cumulative of Actual
+# Plot this cumulative variable (the X-axis can be interpreted as the cumulative)
+# number of cases
+df3S$Lift <- cumsum(df3S$actualclass_test)
+plot(df3S$Lift,type="n",main="Lift Chart for Test data",xlab="Number of Cases",ylab="Cumulative Success")
+lines(df3S$Lift)
+abline(0,sum(df3S$actualclass_test)/nrow(df3S),lty = 2, col="red")
+```
+
+```{r}
+#Plot the Decile-Wise Lift Charts for the Training Data
+
+decile_Lifttrain <- function(df) {
+  #Sort the dataframe
+  df <- df[order(-df$predictprob_train),]
+  
+  #Add rownumbers
+  df$roworder <- 1:nrow(df)
+  
+  #Create a variable that holds the baseline successes for each decile
+  baseline <- sum(df$actualclass_train) / 10
+  
+  #Assign decile
+  df$decile <- ceiling((df$roworder / nrow(df)) * 10)
+  
+  #Count successes in each decile
+  #install.packages("data.table")
+  library("data.table")
+  dt <- data.table(df)
+  dt <- dt[, sum(actualclass_train), by = decile]
+  dt$baseline <- baseline
+  dt$ratio <- dt$V1 / baseline
+  
+  #Plot bargraph
+  #par(mfrow=c(1,2)) 
+  barplot(t(data.frame(dt$ratio)), main="Decile wise ratio of successes", xlab="Deciles", names=dt$decile, col=c("Light Blue"))
+  barplot(t(data.frame(dt$V1,dt$baseline)), beside=TRUE, main="Decile wise comparision of successes for Train Data", xlab="Deciles", names=dt$decile, col=c("Blue","Red"))
+  
+}
+decile_Lifttrain(df2)
+```
+
+```{r}
+#Plot the Decile-Wise Lift Charts for the Test Data
+
+decile_Lifttest <- function(df) {
+  #Sort the dataframe
+  df <- df[order(-df$predictprob_test),]
+  
+  #Add rownumbers
+  df$roworder <- 1:nrow(df)
+  
+  #Create a variable that holds the baseline successes for each decile
+  baseline <- sum(df$actualclass_test) / 10
+  
+  #Assign decile
+  df$decile <- ceiling((df$roworder / nrow(df)) * 10)
+  
+  #Count successes in each decile
+  #install.packages("data.table")
+  library("data.table")
+  dt <- data.table(df)
+  dt <- dt[, sum(actualclass_test), by = decile]
+  dt$baseline <- baseline
+  dt$ratio <- dt$V1 / baseline
+  
+  #Plot bargraph
+  #par(mfrow=c(1,2)) 
+  barplot(t(data.frame(dt$ratio)), main="Decile wise ratio of successes", xlab="Deciles", names=dt$decile, col=c("Light Blue"))
+  barplot(t(data.frame(dt$V1,dt$baseline)), beside=TRUE, main="Decile wise comparision of successes for Test Data", xlab="Deciles", names=dt$decile, col=c("Blue","Red"))
+  
+}
+decile_Lifttest(df3)
+```
+
+
+<!-----------------------------Random Forest---------------------------------->
+
+
+```{r}
+library(randomForest)
+#split data
+set.seed(12345)
+train = sample(nrow(df), nrow(df)*0.7)
+
+# Bagging and Random Forests
+set.seed(12345)
+bag.MH=randomForest(MH_disorder~.-country,data=df,subset=train,mtry=5,importance=TRUE)
+bag.MH
+
+yhat.bag = predict(bag.MH,newdata=df[-train,])
+MH.test=df[-train,"MH_disorder"]
+(c = table(MH.test,yhat.bag))
+(acc = (c[1,1]+c[2,2])/sum(c))
+(sensitivity.rf.1 <- c[2,2]/sum(c[2,]))
+(spedificity.rf.1 <- c[1,1]/sum(c[1,]))
+
+importance(bag.MH)
+varImpPlot(bag.MH)
+```
+
+
+<!-----------------Log Reg with Selected Variables from RF-------------------->
+
+
+```{r}
+dflogreg <- df[,(names(df) %in% c("past_disorder", "treatment", "family_history", "coverage_option", "MH_importance", "medical_leave", "HC_coverage", "observation", "MH_disorder"))]
+set.seed(12345)
+intrain <- sample(nrow(dflogreg), 0.7*nrow(dflogreg))
+dftrain <- data.frame(dflogreg[intrain,])
+dftest<- data.frame(dflogreg[-intrain,])
+#Creating the model
+model_fromRF<-glm(MH_disorder~.,data=dftrain,family="binomial")
+summary(model_fromRF)
+```
+
+```{r}
+#Calculating Error for Training data
+predictprob_train2 <- predict(model_fromRF,type = "response")
+actualclass_train2 <- as.numeric(dftrain$MH_disorder)-1
+predictedclass_train2 <- ifelse(predictprob_train2>0.5,1,0)
+
+(conf_train2 <- table(actualclass_train2,predictedclass_train2))
+(ERR_Train2 <- (conf_train2[1,2]+conf_train2[2,1])/sum(conf_train2))
+(ACC_Train2 <- 1 - ERR_Train2)
+```
+
+```{r}
+#Calculating Error for Test Data
+predictprob_test2 <- predict(model_fromRF,type = "response",newdata=dftest)
+actualclass_test2 <- as.numeric(dftest$MH_disorder)-1
+predictedclass_test2 <- ifelse(predictprob_test2>0.5,1,0)
+
+(conf_test2 <- table(actualclass_test2,predictedclass_test2))
+(ERR_Test2 <- (conf_test2[1,2]+conf_test2[2,1])/sum(conf_test2))
+(ACC_Test2 <- 1 - ERR_Test2)
+```
+
+```{r}
+#Plot the ROC curves for both the training and test data sets on the same graph (distinguishing with different colors)
+library(pROC)
+
+par(pty="s")
+roc_rose2 <- plot(roc(actualclass_train2, predictprob_train2), print.auc = TRUE, legacy.axes=TRUE,col = "blue")
+## Next, the additional argument "add = TRUE" adds the test ROC to the previous plot
+roc_rose2 <- plot(roc(actualclass_test2, predictprob_test2), print.auc = TRUE, 
+                  col = "green", print.auc.y = .4, add = TRUE)
+```
+
+
+<!---------------Random Forest with variables Selected from Log Reg----------->
+
+
+```{r}
+library(randomForest)
+#split data
+set.seed(12345)
+train = sample(nrow(df), nrow(df)*0.7)
+
+#Bagging and Random forest
+set.seed(12345)
+bag.MH2=randomForest(MH_disorder~age+medical_leave+MH_importance+past_disorder+family_history+unsupported_space+treatment+coverage_option,data=df,subset=train,mtry=5,importance=TRUE)
+bag.MH2
+
+yhat.bag2 = predict(bag.MH2,newdata=df[-train,])
+MH.test2=df[-train,"MH_disorder"]
+(c = table(MH.test2,yhat.bag2))
+(acc = (c[1,1]+c[2,2])/sum(c))
+importance(bag.MH2)
+varImpPlot(bag.MH2)
+```
+
+
+<!--------------------------------KNN------------------------------------------>
+
+
+```{r}
+library(fastDummies)
+knn_df <- df
+knn_df$country <- NULL
+#Convert into numeric
+knn_df$gender <- as.numeric(knn_df$gender) - 1
+knn_df$MH_disorder <- as.numeric(knn_df$MH_disorder) - 1
+knn_df$self_employed <- as.numeric(knn_df$self_employed) - 1
+knn_df$company_size <- as.numeric(knn_df$company_size) - 1
+knn_df$IT_related <- as.numeric(knn_df$IT_related) - 1
+knn_df$HC_coverage <- as.numeric(knn_df$HC_coverage)  - 1
+knn_df$medical_leave <- as.numeric(knn_df$medical_leave) - 1
+knn_df$past_disorder <- as.numeric(knn_df$past_disorder) - 1
+knn_df$family_history <- as.numeric(knn_df$family_history) - 1
+knn_df$observation <- as.numeric(knn_df$observation) - 1
+knn_df$unsupported_space <- as.numeric(knn_df$unsupported_space) - 1
+knn_df$supported_space <- as.numeric(knn_df$supported_space) - 1
+knn_df$treatment <- as.numeric(knn_df$treatment) - 1
+knn_df$coverage_option <- as.numeric(knn_df$coverage_option) - 1
+knn_df$formal_discussion <- as.numeric(knn_df$formal_discussion) - 1
+knn_df$resources <- as.numeric(knn_df$resources) - 1
+
+knn_df$MH_illness <- ifelse(knn_df$MH_disorder>0,1,0)
+
+#Create Dummy Variables
+knn_df <- dummy_cols(knn_df, select_columns = c("gender", "self_employed","company_size","IT_related", "HC_coverage", "medical_leave", "past_disorder", "family_history", "observation", "unsupported_space", "supported_space", "tech_support", "treatment", "coverage_option", "formal_discussion", "resources"))
+knn_df = knn_df[,!(names(knn_df) %in% c("gender", "self_employed","company_size","IT_related", "HC_coverage", "medical_leave", "past_disorder", "family_history", "observation", "unsupported_space", "supported_space", "tech_support", "treatment", "coverage_option", "formal_discussion", "resources", "MH_disorder"))]
+
+#Normalization
+fun <- function(x){ 
+  a <- mean(x) 
+  b <- sd(x) 
+  (x - a)/(b) 
+}
+knn_df[,-4] <- apply(knn_df[,-4], 2, fun)
+```
+
+```{r}
+#Partition into train and validation
+set.seed(12345)
+inTrain <- sample(nrow(knn_df), 0.7*nrow(knn_df))
+#
+knn_dftrain <- data.frame(knn_df[inTrain,])
+knn_dfvalid <- data.frame(knn_df[-inTrain,])
+#
+train_input <- as.matrix(knn_dftrain[,-c(4)])
+train_output <- as.vector(knn_dftrain[,4])
+validate_input <- as.matrix(knn_dfvalid[,-c(4)])
+```
+
+```{r}
+#K which minimizes validation error rate
+kmax <- 30
+ER1 <- rep(0,kmax) # Zero vectors to be updated below with error rates
+ER2 <- rep(0,kmax) # Zero vectors to be updated below with error rates
+
+for (i in 1:kmax){
+  prediction_train <- knn(train_input, train_input, train_output, k=i)
+  prediction_validation <- knn(train_input, validate_input,train_output, k=i)
+  
+  confusion_train <- table(knn_dftrain$MH_illness,prediction_train)
+  
+  ER1[i] <- (confusion_train[1,2]+confusion_train[2,1])/sum(confusion_train)
+  
+  confusion_validation <- table(knn_dfvalid$MH_illness,prediction_validation)
+  ER2[i] <- (confusion_validation[1,2]+confusion_validation[2,1])/sum(confusion_validation)
+}
+
+#Plot error rates for different values of k
+plot(c(1,kmax),c(0,0.7),type="n", xlab="K",ylab="Error Rate", main = "Different Values of k vs Error Rate")
+lines(ER1,col="red")
+lines(ER2,col="blue")
+legend(9, 0.7, c("Training","Validation"),lty=c(1,1), col=c("red","blue"))
+#Find K to min validation err
+m <- which.min(ER2)
+cat("Minimum Validation Error k:", m)
+abline(v=m, col="gray", lty=2)
+```
+
+```{r}
+#Metrics at optimal k = 23
+prediction_train <- knn(train_input, train_input,train_output, k=m)
+prediction_validation <- knn(train_input, validate_input,train_output, k=m)
+
+confusion_train <- table(knn_dftrain$MH_illness,prediction_train)
+confusion_validation <- table(knn_dfvalid$MH_illness,prediction_validation)
+(ER_bestk <- (confusion_validation[1,2]+confusion_validation[2,1])/sum(confusion_validation))
+(Acc_bestk <- 1- ER_bestk)
+
+(sensitivity_validation <- confusion_train[2,2]/sum(confusion_train[2,]))
+
+(specificity_validation <- confusion_train[1,1]/sum(confusion_train[1,]))
+```
+
+```{r}
+#Lift chart
+prediction_validation <- knn(train_input, validate_input,train_output, k=m, prob=T)
+predicted.probability.knn <- attr(prediction_validation, "prob")
+predicted.probability.knn <- ifelse(prediction_validation== 1, predicted.probability.knn, 1-predicted.probability.knn)
+
+df1 <- data.frame(prediction_validation, predicted.probability.knn,knn_dfvalid$MH_illness)
+df1S <- df1[order(-predicted.probability.knn),]
+df1S$Gains <- cumsum(df1S$knn_dfvalid.MH_illness)
+plot(df1S$Gains,type="n",main="Lift Chart",xlab="Number of Cases",ylab="Cumulative Success")
+lines(df1S$Gains,col="blue")
+abline(0,sum(df1S$knn_dfvalid.MH_illness)/nrow(df1S),lty = 2, col="red")
+
+```
+
+```{r}
+#ROC Curve
+par(pty="s")
+library(pROC)
+roc_rose <- plot(roc(knn_dfvalid$MH_illness, predicted.probability.knn), 
+                 print.auc = TRUE, col = "blue",legacy.axes=T)
+
+```
+
+
+<!-------------------KNN with variables Selected from Log Reg------------------>
+
+
+```{r}
+
+knn_df1 = df[,(names(df) %in% c("age", "medical_leave", "MH_importance", "past_disorder", "family_history", "unsupported_space", "treatment", "coverage_option", "MH_disorder"))]
+
+#Convert into numeric
+knn_df1$medical_leave <- as.numeric(knn_df1$medical_leave) - 1
+knn_df1$past_disorder <- as.numeric(knn_df1$past_disorder) - 1
+knn_df1$family_history <- as.numeric(knn_df1$family_history) - 1
+knn_df1$unsupported_space <- as.numeric(knn_df1$unsupported_space) - 1
+knn_df1$treatment <- as.numeric(knn_df1$treatment) - 1
+knn_df1$coverage_option <- as.numeric(knn_df1$coverage_option) - 1
+knn_df1$MH_disorder <- as.numeric(knn_df1$MH_disorder) - 1
+
+
+knn_df1$MH_illness <- ifelse(knn_df1$MH_disorder>0,1,0)
+
+library(fastDummies)
+#Create Dummy Variables
+knn_df1 <- dummy_cols(knn_df1, select_columns = c("age", "medical_leave", "MH_importance", "past_disorder", "family_history", "unsupported_space", "treatment", "coverage_option"))
+knn_df1 = knn_df1[,!(names(knn_df1) %in% c("age", "medical_leave", "MH_importance", "past_disorder", "family_history", "unsupported_space", "treatment", "coverage_option", "MH_disorder"))]
+
+#Normalization
+fun <- function(x){ 
+  a <- mean(x) 
+  b <- sd(x) 
+  (x - a)/(b) 
+}
+knn_df1[,-1] <- apply(knn_df1[,-1], 2, fun)
+
+```
+
+```{r}
+#Partition into train and validation
+set.seed(12345)
+inTrain1 <- sample(nrow(knn_df1), 0.7*nrow(knn_df1))
+#
+knn_dftrain1 <- data.frame(knn_df1[inTrain1,])
+knn_dfvalid1 <- data.frame(knn_df1[-inTrain1,])
+
+train_input1 <- as.matrix(knn_dftrain1[,-c(1)])
+train_output1 <- as.vector(knn_dftrain1[,1])
+validate_input1 <- as.matrix(knn_dfvalid1[,-c(1)])
+
+```
+
+```{r}
+#K which minimizes validation error rate
+kmax1 <- 30
+ER11 <- rep(0,kmax1) # Zero vectors to be updated below with error rates
+ER21 <- rep(0,kmax1) # Zero vectors to be updated below with error rates
+
+for (i in 1:kmax1){
+  prediction_train1 <- knn(train_input1, train_input1, train_output1, k=i)
+  prediction_validation1 <- knn(train_input1, validate_input1,train_output1, k=i)
+  
+  confusion_train1 <- table(knn_dftrain1$MH_illness,prediction_train1)
+  
+  ER11[i] <- (confusion_train1[1,2]+confusion_train1[2,1])/sum(confusion_train1)
+  
+  confusion_validation1 <- table(knn_dfvalid1$MH_illness,prediction_validation1)
+  ER21[i] <- (confusion_validation1[1,2]+confusion_validation1[2,1])/sum(confusion_validation1)
+}
+
+#Plot error rates for different values of k
+plot(c(1,kmax1),c(0,0.7),type="n", xlab="K",ylab="Error Rate", main = "Different Values of k vs Error Rate")
+lines(ER11,col="red")
+lines(ER21,col="blue")
+legend(9, 0.7, c("Training","Validation"),lty=c(1,1), col=c("red","blue"))
+#Find K to min validation err
+m1 <- which.min(ER21)
+cat("Minimum Validation Error k:", m1)
+abline(v=m1, col="gray", lty=2)
+
+
+```
+
+```{r}
+
+#Metrics at optimal k = 26
+prediction_train1 <- knn(train_input1, train_input1,train_output1, k=m1)
+prediction_validation1 <- knn(train_input1, validate_input1,train_output1, k=m1)
+
+confusion_train1 <- table(knn_dftrain1$MH_illness,prediction_train1)
+confusion_validation1 <- table(knn_dfvalid1$MH_illness,prediction_validation1)
+(ER_bestk1 <- (confusion_validation1[1,2]+confusion_validation1[2,1])/sum(confusion_validation1))
+(Acc_bestk1 <- 1- ER_bestk1)
+
+(sensitivity_validation1 <- confusion_train1[2,2]/sum(confusion_train1[2,]))
+
+(specificity_validation1 <- confusion_train1[1,1]/sum(confusion_train1[1,]))
+
+```
+
+```{r}
+#Lift chart
+prediction_validation1 <- knn(train_input1, validate_input1,train_output1, k=m1, prob=T)
+predicted.probability.knn1 <- attr(prediction_validation1, "prob")
+predicted.probability.knn1 <- ifelse(prediction_validation1== 1, predicted.probability.knn1, 1-predicted.probability.knn1)
+
+df11 <- data.frame(prediction_validation1, predicted.probability.knn1,knn_dfvalid1$MH_illness)
+df1S1 <- df11[order(-predicted.probability.knn1),]
+df1S1$Gains <- cumsum(df1S1$knn_dfvalid1.MH_illness)
+plot(df1S1$Gains,type="n",main="Lift Chart",xlab="Number of Cases",ylab="Cumulative Success")
+lines(df1S1$Gains,col="blue")
+abline(0,sum(df1S1$knn_dfvalid1.MH_illness)/nrow(df1S1),lty = 2, col="red")
+
+```
+
+```{r}
+#ROC Curve
+par(pty="s")
+library(pROC)
+roc_rose <- plot(roc(knn_dfvalid1$MH_illness, predicted.probability.knn1), 
+                 print.auc = TRUE, col = "blue",legacy.axes=T)
+```
+
+
+<!----------------KNN with variables Selected from Random Forest--------------->
+
+
+```{r}
+knn_df1 = df[,(names(df) %in% c("past_disorder", "treatment", "family_history", "coverage_option", "MH_importance", "medical_leave", "HC_coverage", "observation", "MH_disorder"))]
+
+#Convert into numeric
+knn_df1$MH_disorder <- as.numeric(knn_df1$MH_disorder) - 1
+knn_df1$HC_coverage <- as.numeric(knn_df1$HC_coverage) - 1
+knn_df1$medical_leave <- as.numeric(knn_df1$medical_leave) - 1
+knn_df1$past_disorder <- as.numeric(knn_df1$past_disorder) - 1
+knn_df1$family_history <- as.numeric(knn_df1$family_history) - 1
+knn_df1$observation <- as.numeric(knn_df1$observation) - 1
+knn_df1$treatment <- as.numeric(knn_df1$treatment) - 1
+knn_df1$coverage_option <- as.numeric(knn_df1$coverage_option) - 1
+
+
+knn_df1$MH_illness <- ifelse(knn_df1$MH_disorder>0,1,0)
+
+library(fastDummies)
+#Create Dummy Variables
+knn_df1 <- dummy_cols(knn_df1, select_columns = c("past_disorder", "treatment", "family_history", "coverage_option", "MH_importance", "medical_leave", "HC_coverage", "observation"))
+knn_df1 = knn_df1[,!(names(knn_df1) %in% c("past_disorder", "treatment", "family_history", "coverage_option", "MH_importance", "medical_leave", "HC_coverage", "observation", "MH_disorder"))]
+
+#Normalization
+fun <- function(x){ 
+  a <- mean(x) 
+  b <- sd(x) 
+  (x - a)/(b) 
+}
+knn_df1[,-1] <- apply(knn_df1[,-1], 2, fun)
+
+```
+
+```{r}
+#Partition into train and validation
+set.seed(12345)
+inTrain1 <- sample(nrow(knn_df1), 0.7*nrow(knn_df1))
+#
+knn_dftrain1 <- data.frame(knn_df1[inTrain1,])
+knn_dfvalid1 <- data.frame(knn_df1[-inTrain1,])
+
+train_input1 <- as.matrix(knn_dftrain1[,-c(1)])
+train_output1 <- as.vector(knn_dftrain1[,1])
+validate_input1 <- as.matrix(knn_dfvalid1[,-c(1)])
+
+```
+
+```{r}
+#K which minimizes validation error rate
+kmax1 <- 30
+ER11 <- rep(0,kmax1) # Zero vectors to be updated below with error rates
+ER21 <- rep(0,kmax1) # Zero vectors to be updated below with error rates
+
+for (i in 1:kmax1){
+  prediction_train1 <- knn(train_input1, train_input1, train_output1, k=i)
+  prediction_validation1 <- knn(train_input1, validate_input1,train_output1, k=i)
+  
+  confusion_train1 <- table(knn_dftrain1$MH_illness,prediction_train1)
+  
+  ER11[i] <- (confusion_train1[1,2]+confusion_train1[2,1])/sum(confusion_train1)
+  
+  confusion_validation1 <- table(knn_dfvalid1$MH_illness,prediction_validation1)
+  ER21[i] <- (confusion_validation1[1,2]+confusion_validation1[2,1])/sum(confusion_validation1)
+}
+
+#Plot error rates for different values of k
+plot(c(1,kmax1),c(0,0.7),type="n", xlab="K",ylab="Error Rate", main = "Different Values of k vs Error Rate")
+lines(ER11,col="red")
+lines(ER21,col="blue")
+legend(9, 0.7, c("Training","Validation"),lty=c(1,1), col=c("red","blue"))
+#Find K to min validation err
+m1 <- which.min(ER21)
+cat("Minimum Validation Error k:", m1)
+abline(v=m1, col="gray", lty=2)
+```
+
+```{r}
+#Metrics at optimal k = 18
+prediction_train1 <- knn(train_input1, train_input1,train_output1, k=m1)
+prediction_validation1 <- knn(train_input1, validate_input1,train_output1, k=m1)
+
+confusion_train1 <- table(knn_dftrain1$MH_illness,prediction_train1)
+confusion_validation1 <- table(knn_dfvalid1$MH_illness,prediction_validation1)
+(ER_bestk1 <- (confusion_validation1[1,2]+confusion_validation1[2,1])/sum(confusion_validation1))
+(Acc_bestk1 <- 1- ER_bestk1)
+
+(sensitivity_validation1 <- confusion_train1[2,2]/sum(confusion_train1[2,]))
+
+(specificity_validation1 <- confusion_train1[1,1]/sum(confusion_train1[1,]))
+
+```
+
+```{r}
+#Lift chart
+prediction_validation1 <- knn(train_input1, validate_input1,train_output1, k=m1, prob=T)
+predicted.probability.knn1 <- attr(prediction_validation1, "prob")
+predicted.probability.knn1 <- ifelse(prediction_validation1== 1, predicted.probability.knn1, 1-predicted.probability.knn1)
+
+df11 <- data.frame(prediction_validation1, predicted.probability.knn1,knn_dfvalid1$MH_illness)
+df1S1 <- df11[order(-predicted.probability.knn1),]
+df1S1$Gains <- cumsum(df1S1$knn_dfvalid1.MH_illness)
+plot(df1S1$Gains,type="n",main="Lift Chart",xlab="Number of Cases",ylab="Cumulative Success")
+lines(df1S1$Gains,col="blue")
+abline(0,sum(df1S1$knn_dfvalid1.MH_illness)/nrow(df1S1),lty = 2, col="red")
+
+```
+
+```{r}
+#ROC Curve
+par(pty="s")
+library(pROC)
+roc_rose <- plot(roc(knn_dfvalid1$MH_illness, predicted.probability.knn1), 
+                 print.auc = TRUE, col = "blue",legacy.axes=T)
+```
+
+
+<!----------------------------Naive Bayes------------------------------------->
+
+
+```{r}
+
+nb_df <- df[-3]
+
+#Partition into train and validation
+set.seed(12345)
+inTrain <- sample(nrow(nb_df), 0.7*nrow(nb_df))
+#
+dftrain <- data.frame(nb_df[inTrain,])
+dfvalidation <- data.frame(nb_df[-inTrain,])
+```
+
+```{r}
+library(e1071)
+modelnb <- naiveBayes(MH_disorder~., data=dftrain)
+#modelnb
+
+#class predictions
+prediction_nb <- predict(modelnb, newdata = dfvalidation[,-4])
+
+(confusion_nb <- table(dfvalidation$MH_disorder,prediction_nb,dnn=list('actual','predicted')))
+(errorrate_nb <- (confusion_nb[1,2]+confusion_nb[2,1])/sum(confusion_nb))
+(accrate_nb <- 1 - errorrate_nb)
+
+#class probabilities
+predicted.probability_nb <- predict(modelnb, newdata = dfvalidation[,-4], type="raw")
+
+MHdisorder <- as.numeric(dfvalidation$MH_disorder)-1
+prob_nb <- predicted.probability_nb[,2]
+dfliftnb <- data.frame(prediction_nb, MHdisorder, prob_nb)
+
+```
+
+```{r}
+#Lift Chart
+dfliftnbS <- dfliftnb[order(-prob_nb),]
+dfliftnbS$Gains <- cumsum(dfliftnbS$MHdisorder)
+plot(dfliftnbS$Gains,type="n",main="Lift Chart",xlab="Number of Cases",ylab="Cumulative Success")
+lines(dfliftnbS$Gains,col="blue")
+abline(0,sum(dfliftnbS$MHdisorder)/nrow(dfliftnbS),lty = 2, col="red")
+
+```
+
+```{r}
+#ROC Curve
+roc_rose <- plot(roc(dfvalidation$MH_disorder, prob_nb), print.auc = TRUE, 
+                 col = "red", print.auc.y = .4, legacy.axes=T)
+
+```
+
+
+<!--------------Naives Bayes with variables Selected from Log Reg-------------->
+
+
+```{r}
+nb_df1 <- df[,(names(df) %in% c("age", "medical_leave", "MH_importance", "past_disorder", "family_history", "unsupported_space", "treatment", "coverage_option", "MH_disorder"))]
+
+#Partition into train and validation
+set.seed(12345)
+inTrain1 <- sample(nrow(nb_df1), 0.7*nrow(nb_df1))
+#
+dftrain1 <- data.frame(nb_df1[inTrain1,])
+dfvalidation1 <- data.frame(nb_df1[-inTrain1,])
+
+```
+
+```{r}
+library(e1071)
+modelnb1 <- naiveBayes(MH_disorder~., data=dftrain1)
+#modelnb1
+
+#class predictions
+prediction_nb1 <- predict(modelnb1, newdata = dfvalidation1[,-2])
+
+(confusion_nb1 <- table(dfvalidation1$MH_disorder,prediction_nb1,dnn=list('actual','predicted')))
+(errorrate_nb1 <- (confusion_nb1[1,2]+confusion_nb1[2,1])/sum(confusion_nb1))
+(accrate_nb1 <- 1 - errorrate_nb1)
+
+#class probabilities
+predicted.probability_nb1 <- predict(modelnb1, newdata = dfvalidation1[,-2], type="raw")
+
+MHdisorder <- as.numeric(dfvalidation1$MH_disorder)-1
+prob_nb1 <- predicted.probability_nb1[,2]
+dfliftnb1 <- data.frame(prediction_nb1, MHdisorder, prob_nb1)
+```
+
+```{r}
+#Lift Chart
+dfliftnbS1 <- dfliftnb1[order(-prob_nb1),]
+dfliftnbS1$Gains <- cumsum(dfliftnbS1$MHdisorder)
+plot(dfliftnbS1$Gains,type="n",main="Lift Chart",xlab="Number of Cases",ylab="Cumulative Success")
+lines(dfliftnbS1$Gains,col="blue")
+abline(0,sum(dfliftnbS1$MHdisorder)/nrow(dfliftnbS1),lty = 2, col="red")
+
+```
+
+```{r}
+#ROC Curve
+roc_rose <- plot(roc(dfvalidation1$MH_disorder, prob_nb1), print.auc = TRUE, 
+                 col = "red", print.auc.y = .4, legacy.axes=T)
+```
+
+
+<!----------Naives Bayes with variables Selected from Random Forest------------>
+
+
+```{r}
+nb_df1 <- df[,(names(df) %in% c("past_disorder", "treatment", "family_history", "coverage_option", "MH_importance", "medical_leave", "HC_coverage", "observation", "MH_disorder"))]
+
+#Partition into train and validation
+set.seed(12345)
+inTrain1 <- sample(nrow(nb_df1), 0.7*nrow(nb_df1))
+#
+dftrain1 <- data.frame(nb_df1[inTrain1,])
+dfvalidation1 <- data.frame(nb_df1[-inTrain1,])
+```
+
+```{r}
+library(e1071)
+modelnb1 <- naiveBayes(MH_disorder~., data=dftrain1)
+#modelnb1
+
+#class predictions
+prediction_nb1 <- predict(modelnb1, newdata = dfvalidation1[,-2])
+
+(confusion_nb1 <- table(dfvalidation1$MH_disorder,prediction_nb1,dnn=list('actual','predicted')))
+(errorrate_nb1 <- (confusion_nb1[1,2]+confusion_nb1[2,1])/sum(confusion_nb1))
+(accrate_nb1 <- 1 - errorrate_nb1)
+(sensitivity.nb.1 <- confusion_nb1[2,2]/sum(confusion_nb1[2,]))
+(spedificity.nb.1 <- confusion_nb1[1,1]/sum(confusion_nb1[1,]))
+
+#class probabilities
+predicted.probability_nb1 <- predict(modelnb1, newdata = dfvalidation1[,-2], type="raw")
+
+MHdisorder <- as.numeric(dfvalidation1$MH_disorder)-1
+prob_nb1 <- predicted.probability_nb1[,2]
+dfliftnb1 <- data.frame(prediction_nb1, MHdisorder, prob_nb1)
+```
+
+```{r}
+#Lift Chart
+dfliftnbS1 <- dfliftnb1[order(-prob_nb1),]
+dfliftnbS1$Gains <- cumsum(dfliftnbS1$MHdisorder)
+plot(dfliftnbS1$Gains,type="n",main="Lift Chart",xlab="Number of Cases",ylab="Cumulative Success")
+lines(dfliftnbS1$Gains,col="blue")
+abline(0,sum(dfliftnbS1$MHdisorder)/nrow(dfliftnbS1),lty = 2, col="red")
+```
+
+```{r}
+#ROC Curve
+roc_rose <- plot(roc(dfvalidation1$MH_disorder, prob_nb1), print.auc = TRUE, 
+                 col = "red", print.auc.y = .4, legacy.axes=T)
+```
+
+
+<!-------------------------------Boosting-------------------------------------->
+
+
+```{r}
+library(gbm)
+set.seed(12345)
+boodf <- df
+boodf$MH_disorder <- ifelse(boodf$MH_disorder=="Yes",1,0)
+boost.MH=gbm(MH_disorder~.-country,data=boodf[train,],distribution="bernoulli",n.trees=5000,interaction.depth=4)
+summary(boost.MH)
+par(mfrow=c(1,2))
+plot(boost.MH,i="past_disorder")
+plot(boost.MH,i="age")
+yhat.boost=predict(boost.MH,newdata=boodf[-train,],n.trees=5000,type="response")
+predicted <- ifelse(yhat.boost>=0.5,1,0)
+yhat.test=boodf$MH_disorder[-train]
+(c = table(predicted,yhat.test))
+(acc = (c[1,1]+c[2,2])/sum(c))
+(sensitivity.boo.1 <- c[2,2]/sum(c[2,]))
+
+(specificity.boo.1 <- c[1,1]/sum(c[1,]))
+```
+
+
+<!---------------Boosting with variables Selected from Log Reg---------------->
+
+
+```{r}
+library(gbm)
+set.seed(12345)
+boodf <- df
+boodf$MH_disorder <- ifelse(boodf$MH_disorder=="Yes",1,0)
+boost.MH2=gbm(MH_disorder~age+medical_leave+MH_importance+past_disorder+family_history+unsupported_space+treatment+coverage_option,data=boodf[train,],distribution="bernoulli",n.trees=5000,interaction.depth=4)
+summary(boost.MH2)
+par(mfrow=c(1,2))
+plot(boost.MH2,i="age")
+plot(boost.MH2,i="past_disorder")
+yhat.boost2=predict(boost.MH2,newdata=boodf[-train,],n.trees=5000,type="response")
+predicted2 <- ifelse(yhat.boost2>=0.5,1,0)
+yhat.test2=boodf$MH_disorder[-train]
+(c = table(predicted2,yhat.test2))
+(acc = (c[1,1]+c[2,2])/sum(c))
+```
+
+
+<!-------------------------Decision Tree-------------------------------------->
+
+
+```{r}
+set.seed(12345)
+intrain <- sample(nrow(df), 0.7*nrow(df))
+dftrain <- data.frame(df[intrain,])
+dftest<- data.frame(df[-intrain,])
+```
+
+```{r}
+tree.profit=tree(MH_disorder~.-country,dftrain)
+summary(tree.profit)
+plot(tree.profit)
+text(tree.profit,pretty=0)
+```
+
+```{r}
+tree.pred=predict(tree.profit,dftrain,type="class")
+tree.pred.2=predict(tree.profit,dftest,type="class")
+actual1 <- dftrain$MH_disorder
+actual2 <- dftest$MH_disorder
+(confusion_train <- table(tree.pred,actual1))
+confusion_test <- table(tree.pred.2,actual2)
+(confusion_train[1,1]+confusion_train[2,2])/sum(confusion_train)
+(confusion_test[1,1]+confusion_test[2,2])/sum(confusion_test)
+(sensitivity_tree.1 <- confusion_test[2,2]/sum(confusion_test[2,]))
+
+(specificity_tree.1 <- confusion_test[1,1]/sum(confusion_test[1,]))
+```
+
+```{r}
+#Pruned tree
+prune=cv.tree(tree.profit,FUN=prune.misclass)
+plot(prune$size, prune$dev, type='b')
+```
+
+```{r}
+prune.profit=prune.misclass(tree.profit,best=3)
+plot(prune.profit)
+text(prune.profit,pretty=0)
+```
+
+```{r}
+tree.pred.3=predict(prune.profit,dftest,type="class")
+confusion <- table(tree.pred.3,actual2)
+(confusion[1,1]+confusion[2,2])/sum(confusion)
+```
+
+
+<!-----------------------------Clustering------------------------------------->
+
+
+```{r}
+#Loading all necessary Libraries
+library(factoextra)
+library(arules)
+library(arulesViz)
+library(fastDummies)
+
+#Storing the dataframe into a var
+dfcluster <- df
+#Creating Dummy Variables of the factor cols
+dfcluster2 <- dummy_cols(dfcluster, select_columns = c("gender","self_employed","company_size","IT_related","HC_coverage","medical_leave","past_disorder","family_history","observation","unsupported_space","supported_space","tech_support","treatment","coverage_option","formal_discussion","resources"), remove_selected_columns = TRUE)
+
+```
+
+```{r}
+#Running Clustering with k=5
+set.seed(12345)
+dfcluster2 <- scale(dfcluster2[,-c(2,3)]) #leaving out 2nd and 3rd col because 2nd and 3rd col has text data in it
+km.out=kmeans(dfcluster2,5,nstart=20)
+
+#Cluster centres:
+d = dist(km.out$centers,diag=T, upper=T)
+x = as.matrix(d, 5, 5)
+heatmap(x, Rowv=NA, Colv="Rowv", scale='none')
+
+
+#Combining the initial cluster df with the cluster outputs
+dfcluster$Cluster <- km.out$cluster #adding cluster number as a variable
+#profile <- aggregate(. ~ Cluster, dfcluster, mean)
+
+#Combining the dependent var and the cluster number
+comb <- data.frame(dfcluster$MH_disorder, dfcluster$Cluster)
+colnames(comb) <- c('MH_Disorder','Cluster')
+
+```
+
+```{r}
+#Percentage of people in each cluster
+combperc <- comb %>%
+  group_by(Cluster) %>%
+  summarise(Count = n()) %>%
+  mutate(Percentage = (Count/sum(Count))*100)
+
+#Bar Chart
+percentbar <- combperc %>%
+  ggplot(aes(x=Cluster, y=Percentage)) +
+  geom_col(fill="darkred") +
+  geom_text(aes(label = sprintf("%0.1f", Percentage)), vjust = 1.5, colour = "white") + 
+  scale_fill_manual(name="", values = c("grey","darkred"))
+percentbar + 
+  labs(x = "Cluster",y = "Percentage of People",
+       title = "Cluster vs Percentage of People")
+
+```
+
+```{r}
+#Elbow Method to determine optimal value of K
+fviz_nbclust(dfcluster2, kmeans, method = "wss")
+```
+
+```{r}
+#Group and summarise each cluster based on values of MH_disorders
+clusterdisorder <- dfcluster %>%
+  group_by(MH_disorder, Cluster) %>%
+  summarise(count = n())
+clusterdisorder
+
+```
+
+
+<!------------Clustering with vars from LogReg Backward Elim.------------------->
+
+
+```{r}
+dfnew <- df[,c("age","MH_disorder", "medical_leave", "MH_importance","past_disorder","family_history","unsupported_space","treatment","coverage_option")]
+
+#Creating Dummy Variables of the factor cols
+dfclusternew <- dummy_cols(dfnew, select_columns = c("medical_leave","past_disorder","family_history","unsupported_space","treatment","coverage_option"), remove_selected_columns = TRUE)
+
+```
+
+```{r}
+#Running Clustering with k=5
+set.seed(12345)
+dfclusternew <- scale(dfclusternew[,c(-2)]) #leaving out 2nd col coz its our dep var
+km.out=kmeans(dfclusternew,5,nstart=20)
+
+#Cluster centres:
+d = dist(km.out$centers,diag=T, upper=T)
+x = as.matrix(d, 5, 5)
+heatmap(x, Rowv=NA, Colv="Rowv", scale='none')
+
+
+#Combining the initial cluster df with the cluster outputs
+dfnew$Cluster <- km.out$cluster #adding cluster number as a variable
+#profile <- aggregate(. ~ Cluster, dfnew, mean)
+
+#Combining the dependent var and the cluster number
+comb <- data.frame(dfnew$MH_disorder, dfnew$Cluster)
+colnames(comb) <- c('MH_Disorder','Cluster')
+
+```
+
+```{r}
+#Percentage of people in each cluster
+combperc <- comb %>%
+  group_by(Cluster) %>%
+  summarise(Count = n()) %>%
+  mutate(Percentage = (Count/sum(Count))*100)
+
+#Bar Chart
+percentbar <- combperc %>%
+  ggplot(aes(x=Cluster, y=Percentage)) +
+  geom_col(fill="darkred") +
+  geom_text(aes(label = sprintf("%0.1f", Percentage)), vjust = 1.5, colour = "white") + 
+  scale_fill_manual(name="", values = c("grey","darkred"))
+percentbar + 
+  labs(x = "Cluster",y = "Percentage of People",
+       title = "Cluster vs Percentage of People")
+
+```
+
+```{r}
+#Elbow Method to determine optimal value of K
+fviz_nbclust(dfclusternew, kmeans, method = "wss")
+
+```
+
+```{r}
+#Group and summarise each cluster based on values of MH_disorders
+clusterdisorder <- dfnew %>%
+  group_by(MH_disorder, Cluster) %>%
+  summarise(count = n())
+clusterdisorder
+```
+
+
+<!-----------------Clustering with vars from Random Forest--------------------->
+
+
+```{r}
+library(fastDummies)
+dfnew2 <- df[,c("observation","HC_coverage","medical_leave", "MH_importance","past_disorder","family_history","unsupported_space","treatment","coverage_option", "MH_disorder")]
+
+#Creating Dummy Variables of the factor cols
+dfclusternew2 <- dummy_cols(dfnew2, select_columns = c("observation","HC_coverage","medical_leave","past_disorder","family_history","unsupported_space","treatment","coverage_option"), remove_selected_columns = TRUE)
+
+```
+
+```{r}
+#Running Clustering with k=5
+set.seed(12345)
+dfclusternew2 <- scale(dfclusternew2[,c(-2)]) #leaving out 2nd col coz its our dep var
+km.out=kmeans(dfclusternew2,5,nstart=20)
+
+#Cluster centres:
+d = dist(km.out$centers,diag=T, upper=T)
+x = as.matrix(d, 5, 5)
+heatmap(x, Rowv=NA, Colv="Rowv", scale='none')
+
+
+#Combining the initial cluster df with the cluster outputs
+dfnew2$Cluster <- km.out$cluster #adding cluster number as a variable
+#profile <- aggregate(. ~ Cluster, dfnew2, mean)
+
+#Combining the dependent var and the cluster number
+comb <- data.frame(dfnew2$MH_disorder, dfnew2$Cluster)
+colnames(comb) <- c('MH_Disorder','Cluster')
+
+```
+
+```{r}
+#Percentage of people in each cluster
+combperc <- comb %>%
+  group_by(Cluster) %>%
+  summarise(Count = n()) %>%
+  mutate(Percentage = (Count/sum(Count))*100)
+
+#Bar Chart
+percentbar <- combperc %>%
+  ggplot(aes(x=Cluster, y=Percentage)) +
+  geom_col(fill="darkred") +
+  geom_text(aes(label = sprintf("%0.1f", Percentage)), vjust = 1.5, colour = "white") + 
+  scale_fill_manual(name="", values = c("grey","darkred"))
+percentbar + 
+  labs(x = "Cluster",y = "Percentage of People",
+       title = "Cluster vs Percentage of People")
+
+```
+
+```{r}
+#Elbow Method to determine optimal value of K
+fviz_nbclust(dfclusternew2, kmeans, method = "wss")
+
+```
+
+```{r}
+#Group and summarise each cluster based on values of MH_disorders
+clusterdisorder <- dfnew2 %>%
+  group_by(MH_disorder, Cluster) %>%
+  summarise(count = n())
+clusterdisorder
+```
+
+
+<!-----------------------Association Rules------------------------------------->
+
+
+```{r}
+dfassoc <- df
+
+dfassoc2 <- dummy_cols(dfassoc, select_columns = c("gender","self_employed","company_size","IT_related","HC_coverage","medical_leave","past_disorder","family_history","observation","unsupported_space","supported_space","tech_support","treatment","coverage_option","formal_discussion","resources"), remove_selected_columns = TRUE)
+dfassoc2$MH_disorder <- as.numeric(dfassoc2$MH_disorder) - 1
+
+```
+
+```{r}
+#
+assoc <- as.matrix(dfassoc2)
+assoc <- apply(assoc,1:2, function(x) ifelse(x==1,TRUE,FALSE))
+#
+T <- as(assoc,"transactions")
+# To look at the data
+#itemFrequencyPlot(T, col="Pink")
+
+```
+
+```{r}
+# Rules targeting (here rhs = MH_disorder)
+#Ordering by Lift, then Confidence, then support
+rules<-apriori(data=T, parameter=list(supp=0.001,conf = 0.08), 
+               appearance = list(default="lhs",rhs="MH_disorder"),
+               control = list(verbose=F))
+rules<-sort(rules, by=c("lift","confidence","support"),decreasing=TRUE)
+#plot(rules[1:10], method="grouped")
+inspect(rules[1:5])
+
+```
+
+```{r}
+#Working with just Cluster and MH_disorder
+ClusDisord <- select(dfcluster, Cluster, MH_disorder)
+ClusDisord$MH_disorder <- as.numeric(ClusDisord$MH_disorder) - 1
+
+ClusDisord$Cluster_1 <- ifelse(ClusDisord$Cluster == 1,1,0)
+ClusDisord$Cluster_2 <- ifelse(ClusDisord$Cluster == 2,1,0)
+ClusDisord$Cluster_3 <- ifelse(ClusDisord$Cluster == 3,1,0)
+ClusDisord$Cluster_4 <- ifelse(ClusDisord$Cluster == 4,1,0)
+ClusDisord$Cluster_5 <- ifelse(ClusDisord$Cluster == 5,1,0)
+
+ClusDisord <- select(ClusDisord, -Cluster)
+
+ClusDisord <- as.matrix(ClusDisord)
+ClusDisord <- apply(ClusDisord,1:2, function(x) ifelse(x==1,TRUE,FALSE))
+#
+T2 <- as(ClusDisord,"transactions")
+
+#Ordering by Lift, then Confidence, then support
+rules3<-apriori(data=T2, parameter=list(supp=0.001,conf = 0.08), 
+                appearance = list(default="lhs",rhs="MH_disorder"),
+                control = list(verbose=F))
+rules3<-sort(rules3, by=c("lift","confidence","support"), decreasing=TRUE)
+inspect(rules3)
+
+#Grouping By the disorder count in cluster 5
+Cluster5 <- dfcluster %>% 
+  filter(Cluster == 5) %>%
+  group_by(MH_disorder) %>%
+  summarise(count = n())
+Cluster5
+
+```
+
+
+<!-------------Association Rules with Vars selected from Log Reg-------------->
+
+
+```{r}
+dfassocnew <- df[,c("age","MH_disorder", "medical_leave", "MH_importance","past_disorder","family_history","unsupported_space","treatment","coverage_option")]
+
+dfassocnew2 <- dummy_cols(dfassocnew, select_columns = c("medical_leave","past_disorder","family_history","unsupported_space","treatment","coverage_option"), remove_selected_columns = TRUE)
+
+dfassocnew2$MH_disorder <- as.numeric(dfassocnew2$MH_disorder) - 1
+
+```
+
+```{r}
+#
+assoc <- as.matrix(dfassocnew2)
+assoc <- apply(assoc,1:2, function(x) ifelse(x==1,TRUE,FALSE))
+#
+T <- as(assoc,"transactions")
+# To look at the data
+#itemFrequencyPlot(T, col="Pink")
+
+```
+
+```{r}
+# Rules targeting (here rhs = MH_disorder)
+#Ordering by Lift, then Confidence, then support
+rules<-apriori(data=T, parameter=list(supp=0.001,conf = 0.08), 
+               appearance = list(default="lhs",rhs="MH_disorder"),
+               control = list(verbose=F))
+rules<-sort(rules, by=c("lift","confidence","support"),decreasing=TRUE)
+#plot(rules, method="grouped")
+inspect(rules[1:5])
+```
+
+```{r}
+#Working with just Cluster and MH_disorder
+ClusDisord <- select(dfnew, Cluster, MH_disorder)
+ClusDisord$MH_disorder <- as.numeric(ClusDisord$MH_disorder) - 1
+
+ClusDisord$Cluster_1 <- ifelse(ClusDisord$Cluster == 1,1,0)
+ClusDisord$Cluster_2 <- ifelse(ClusDisord$Cluster == 2,1,0)
+ClusDisord$Cluster_3 <- ifelse(ClusDisord$Cluster == 3,1,0)
+ClusDisord$Cluster_4 <- ifelse(ClusDisord$Cluster == 4,1,0)
+ClusDisord$Cluster_5 <- ifelse(ClusDisord$Cluster == 5,1,0)
+
+ClusDisord <- select(ClusDisord, -Cluster)
+
+ClusDisord <- as.matrix(ClusDisord)
+ClusDisord <- apply(ClusDisord,1:2, function(x) ifelse(x==1,TRUE,FALSE))
+#
+T2 <- as(ClusDisord,"transactions")
+
+#Ordering by Lift, then Confidence, then support
+rules3<-apriori(data=T2, parameter=list(supp=0.001,conf = 0.08), 
+                appearance = list(default="lhs",rhs="MH_disorder"),
+                control = list(verbose=F))
+rules3<-sort(rules3, by=c("lift","confidence","support"), decreasing=TRUE)
+inspect(rules3)
+
+#Grouping By the disorder count in cluster 5
+Cluster5 <- dfnew %>% 
+  filter(Cluster == 5) %>%
+  group_by(MH_disorder) %>%
+  summarise(count = n())
+Cluster5
+```
+
+
+<!-----------Association Rules with Vars selected from Random Forest----------->
+
+
+```{r}
+dfassocrf <- df[,c("observation","HC_coverage","medical_leave", "MH_importance","past_disorder","family_history","unsupported_space","treatment","coverage_option", "MH_disorder")]
+
+dfassocrf2 <- dummy_cols(dfassocrf, select_columns = c("observation","HC_coverage","medical_leave","past_disorder","family_history","unsupported_space","treatment","coverage_option"), remove_selected_columns = TRUE)
+
+dfassocrf2$MH_disorder <- as.numeric(dfassocrf2$MH_disorder) - 1
+
+```
+
+```{r}
+#
+assoc <- as.matrix(dfassocrf2)
+assoc <- apply(assoc,1:2, function(x) ifelse(x==1,TRUE,FALSE))
+#
+T <- as(assoc,"transactions")
+# To look at the data
+#itemFrequencyPlot(T, col="Pink")
+
+```
+
+```{r}
+# Rules targeting (here rhs = MH_disorder)
+#Ordering by Lift, then Confidence, then support
+rules<-apriori(data=T, parameter=list(supp=0.001,conf = 0.08), 
+               appearance = list(default="lhs",rhs="MH_disorder"),
+               control = list(verbose=F))
+rules<-sort(rules, by=c("lift","confidence","support"),decreasing=TRUE)
+#plot(rules, method="grouped")
+inspect(rules[1:5])
+```
+
+```{r}
+#Working with just Cluster and MH_disorder
+ClusDisord <- select(dfnew2, Cluster, MH_disorder)
+ClusDisord$MH_disorder <- as.numeric(ClusDisord$MH_disorder) - 1
+
+ClusDisord$Cluster_1 <- ifelse(ClusDisord$Cluster == 1,1,0)
+ClusDisord$Cluster_2 <- ifelse(ClusDisord$Cluster == 2,1,0)
+ClusDisord$Cluster_3 <- ifelse(ClusDisord$Cluster == 3,1,0)
+ClusDisord$Cluster_4 <- ifelse(ClusDisord$Cluster == 4,1,0)
+ClusDisord$Cluster_5 <- ifelse(ClusDisord$Cluster == 5,1,0)
+
+ClusDisord <- select(ClusDisord, -Cluster)
+
+ClusDisord <- as.matrix(ClusDisord)
+ClusDisord <- apply(ClusDisord,1:2, function(x) ifelse(x==1,TRUE,FALSE))
+#
+T2 <- as(ClusDisord,"transactions")
+
+#Ordering by Lift, then Confidence, then support
+rules3<-apriori(data=T2, parameter=list(supp=0.001,conf = 0.08), 
+                appearance = list(default="lhs",rhs="MH_disorder"),
+                control = list(verbose=F))
+rules3<-sort(rules3, by=c("lift","confidence","support"), decreasing=TRUE)
+inspect(rules3)
+
+#Grouping By the disorder count in cluster 3
+Cluster3 <- dfnew %>% 
+  filter(Cluster == 3) %>%
+  group_by(MH_disorder) %>%
+  summarise(count = n())
+Cluster3
+```
+
